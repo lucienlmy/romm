@@ -165,6 +165,33 @@ class TestFSRomsHandler:
         assert "Test" in parsed_tags.other_tags
 
     @pytest.mark.parametrize(
+        "tag, regions, languages, other_tags",
+        [
+            ("EU-US", ["Europe", "USA"], [], []),
+            ("en-fr", [], ["English", "French"], []),
+            ("EU-US, en-fr", ["Europe", "USA"], ["English", "French"], []),
+            ("Pt-BR", [], ["Brazilian Portuguese"], []),
+            ("En-US", [], [], ["En-US"]),
+            ("EU-XX", [], [], ["EU-XX"]),
+            ("en-zz", [], [], ["en-zz"]),
+            ("EU-en", [], [], ["EU-en"]),
+            ("EU-", [], [], ["EU-"]),
+            ("Nl-No", [], ["Dutch", "Norwegian"], []),
+            ("NL-NO", ["Netherlands", "Norway"], [], []),
+            ("SW-R", [], [], ["SW-R"]),
+            ("T-Br", [], [], ["T-Br"]),
+        ],
+    )
+    def test_parse_tags_tosec_compound_tags(
+        self, handler: FSRomsHandler, tag, regions, languages, other_tags
+    ):
+        parsed = handler.parse_tags(f"Game (1986)(Devstudio)({tag}).tap")
+
+        assert parsed.regions == regions
+        assert parsed.languages == languages
+        assert parsed.other_tags == ["1986", "Devstudio", *other_tags]
+
+    @pytest.mark.parametrize(
         "fs_name,regions",
         [
             ("Game (Denmark).zip", ["Denmark"]),

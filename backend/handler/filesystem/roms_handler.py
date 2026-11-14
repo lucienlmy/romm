@@ -6,7 +6,7 @@ import hashlib
 import os
 import re
 import struct
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -250,6 +250,18 @@ TRANSLATION_TAG_REGEX = re.compile(
 
 # The regional variant that opens a GoodTools patch ("-BR" in "T+Pt-BR1.1_Grp").
 TRANSLATION_VARIANT_REGEX = re.compile(r"^-([a-z]{2})(?![a-z])", re.I)
+
+# TOSEC joins two-letter country or language codes with hyphens ("(EU-US)",
+# "(en-fr)"). Single letters stay out: "(SW-R)" is a TOSEC copyright status.
+TOSEC_COMPOUND_TAG_REGEX = re.compile(r"^[a-z]{2}(?:-[a-z]{2})+$", re.I)
+
+
+def _resolve_every(
+    parts: Sequence[str], resolve: Callable[[str], str | None]
+) -> list[str]:
+    """Resolve every part, or return nothing if any part is unrecognized."""
+    resolved = [name for part in parts if (name := resolve(part))]
+    return resolved if len(resolved) == len(parts) else []
 
 
 @dataclass(frozen=True)
@@ -577,6 +589,23 @@ class FSRomsHandler(FSHandler):
             revision_match = REVISION_TAG_REGEX.match(raw_tag)
             if revision_match:
                 revision = revision_match[1] or revision_match[2] or ""
+                continue
+
+            # Same precedence as a single tag, so "Nl-No" reads as languages.
+            # Unknown compounds stay intact rather than yielding a partial match.
+            if TOSEC_COMPOUND_TAG_REGEX.match(raw_tag):
+                parts = raw_tag.split("-")
+                for resolve, target in (
+                    (REGIONS_BY_SHORTCODE.get, regions),
+                    (LANGUAGES_BY_SHORTCODE.get, languages),
+                    (normalize_region, regions),
+                    (normalize_language, languages),
+                ):
+                    if resolved := _resolve_every(parts, resolve):
+                        target.extend(resolved)
+                        break
+                else:
+                    other_tags.append(raw_tag)
                 continue
 
             # Anything else
